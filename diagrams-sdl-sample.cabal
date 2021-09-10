@@ -27,6 +27,7 @@ library
                        , diagrams, colour, palette
                        , diagrams-cairo, cairo
                        , sdl2
+                       , time
   ghc-options:         -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole
   default-language:    Haskell2010
 
@@ -40,6 +41,7 @@ executable sample-exe
                        , diagrams, colour, palette
                        , diagrams-cairo, cairo
                        , sdl2
+                       , time
   ghc-options:         -threaded -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole
   default-language:    Haskell2010
 

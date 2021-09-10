@@ -2,7 +2,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell       #-}
 {-# LANGUAGE TypeFamilies          #-}
-{-# LANGUAGE OverloadedStrings          #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Diagrams.TwoD.Model
@@ -42,6 +41,7 @@ module Diagrams.TwoD.Model
 import           Control.Lens              hiding (none, ( # ))
 import           Data.Colour.Names
 import           Data.Default.Class
+import           Data.List                 (intercalate)
 import           Linear.Vector
 import           Numeric.Interval.NonEmpty.Internal
 
@@ -58,8 +58,6 @@ import           Geometry
 import           Geometry.Envelope
 import           Geometry.Direction
 import           Geometry.Trace
-import qualified Data.Text as T
-import           TextShow
 
 ------------------------------------------------------------------------
 -- Marking the origin
@@ -269,7 +267,7 @@ showTrace = showTrace' def
 
 mkLabels
   :: (TypeableFloat n, Monoid' m)
-  => (T.Text -> QDiagram V2 n m) -> QDiagram V2 n m -> QDiagram V2 n m
+  => (String -> QDiagram V2 n m) -> QDiagram V2 n m -> QDiagram V2 n m
 mkLabels f d = foldMap mkLabel (allSubs d) where
   mkLabel (nm, sub) = f (prettyName nm) # moveTo (subLocation sub)
 
@@ -278,6 +276,6 @@ showLabels :: Diagram V2 -> Diagram V2
 showLabels d = mkLabels text d <> d
 
 -- | Display a name without the \"toName\" prefix for singular names.
-prettyName :: Name -> T.Text
-prettyName (Name ns) = T.intercalate " .> " $ map (\(AName n) -> showt n) ns
+prettyName :: Name -> String
+prettyName (Name ns) = intercalate " .> " $ map (\(AName n) -> show n) ns
 

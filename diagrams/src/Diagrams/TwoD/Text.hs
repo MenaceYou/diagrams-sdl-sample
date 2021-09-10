@@ -67,7 +67,7 @@ import           Geometry.TwoD.Types
 import           Diagrams.Types
 import           Diagrams.TwoD.Attributes
 import           Diagrams.Attributes
-import qualified Data.Text as T
+
 
 ------------------------------------------------------------
 -- Text diagrams
@@ -80,7 +80,7 @@ import qualified Data.Text as T
 --
 --   This constructor should not be used directly. Use 'text',
 --   'alignedText' or 'baselineText'.
-data Text n = Text (TextAlignment n) T.Text
+data Text n = Text (TextAlignment n) String
   deriving Typeable
   -- XXX When rendering text you should only use a transform with
   -- an average scale of one
@@ -93,7 +93,7 @@ data TextAlignment n = BaselineText | BoxAlignedText n n
 
 -- | Make a text from a 'TextAlignment', recommending a fill colour of
 --   'black' and 'fontSize' of @'local' 1@.
-mkText :: TextAlignment Double -> T.Text -> Diagram V2
+mkText :: TextAlignment Double -> String -> Diagram V2
 mkText a = applyStyle sty . mkText' a
   where
     sty = mempty & backupAttr _FontSize    ?~ local 1
@@ -102,7 +102,7 @@ mkText a = applyStyle sty . mkText' a
 -- | Make a text from a 'TextAlignment' without any default size or fill
 --   colour. This is useful is you want to recommend your own using
 --   'recommendFillColor' or 'recommendFontSize'.
-mkText' :: TypeableFloat n => TextAlignment n -> T.Text -> QDiagram V2 n Any
+mkText' :: TypeableFloat n => TextAlignment n -> String -> QDiagram V2 n Any
 mkText' a t = mkQD (Prim $ Text a t)
                    (pointEnvelope origin)
                    mempty
@@ -113,7 +113,7 @@ mkText' a t = mkQD (Prim $ Text a t)
 --
 --   Note that it /takes up no space/, as text size information is not
 --   available.
-text :: T.Text -> Diagram V2
+text :: String -> Diagram V2
 text = alignedText 0.5 0.5
 
 -- | Create a primitive text diagram from the given string, origin at
@@ -121,7 +121,7 @@ text = alignedText 0.5 0.5
 --   @'alignedText' 0 1@.
 --
 --   Note that it /takes up no space/.
-topLeftText :: T.Text -> Diagram V2
+topLeftText :: String -> Diagram V2
 topLeftText = alignedText 0 1
 
 -- | Create a primitive text diagram from the given string, with the
@@ -134,7 +134,7 @@ topLeftText = alignedText 0 1
 --   and descent, rather than the height of the particular string.
 --
 --   Note that it /takes up no space/.
-alignedText :: Double -> Double -> T.Text -> Diagram V2
+alignedText :: Double -> Double -> String -> Diagram V2
 alignedText w h = mkText (BoxAlignedText w h)
 
 -- | Create a primitive text diagram from the given string, with the
@@ -143,7 +143,7 @@ alignedText w h = mkText (BoxAlignedText w h)
 --   graphics library.
 --
 --   Note that it /takes up no space/.
-baselineText :: T.Text -> Diagram V2
+baselineText :: String -> Diagram V2
 baselineText = mkText BaselineText
 
 ------------------------------------------------------------------------
@@ -154,11 +154,11 @@ baselineText = mkText BaselineText
 
 -- | The @Font@ attribute specifies the name of a font family.  Inner
 --   @Font@ attributes override outer ones.
-newtype Font = Font (Last T.Text)
+newtype Font = Font (Last String)
   deriving (Typeable, Semigroup, Eq)
 
 -- | Isomorphism between a font family and its string name.
-_Font :: Iso' Font T.Text
+_Font :: Iso' Font String
 _Font = coerced
 {-# INLINE _Font #-}
 
@@ -166,11 +166,11 @@ instance AttributeClass Font where
   type AttrType Font = 'IAttr
 
 -- | Specify a font family to be used for all text within a diagram.
-font :: ApplyStyle a => T.Text -> a -> a
+font :: ApplyStyle a => String -> a -> a
 font = applyAttr _Font
 
 -- | Lens onto the font name of a style.
-_font :: HasStyle a => Lens' a (Maybe T.Text)
+_font :: HasStyle a => Lens' a (Maybe String)
 _font = style . atAttr _Font
 
 -- Font size -----------------------------------------------------------

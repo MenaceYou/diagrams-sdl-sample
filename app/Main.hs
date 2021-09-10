@@ -19,23 +19,24 @@ import Diagrams.TwoD.Image (imageEmb)
 import Diagrams.Backend.Cairo
 
 -- diagrams-rasterific
-import Diagrams.Backend.Rasterific (renderImage)
+-- import Diagrams.Backend.Rasterific (renderImage)
 
 -- JuicyPixels
-import Codec.Picture.Types (DynamicImage(..))
+-- import Codec.Picture.Types (DynamicImage(..))
 
 import Data.Time
-import Data.Text (Text)
-import TextShow
+-- import Data.Text (Text)
+-- import TextShow
 -- base
 import Data.Int (Int32)
 import Data.Word (Word8)
 import Data.IORef (newIORef, writeIORef, readIORef, modifyIORef)
 import Foreign.Ptr (nullPtr)
 import Control.Monad (forM, forM_, replicateM)
+import Data.Maybe (listToMaybe)
 
 -- safe
-import Safe (headMay)
+-- import Safe (headMay)
 
 -- palette
 import Data.Colour.Palette.ColorSet
@@ -47,10 +48,10 @@ type NormalDiagram = Diagram V2
 
 type GenericDiagram a = QDiagram V2 Double a
 
-type SelectableDiagram = GenericDiagram [Text]
+type SelectableDiagram = GenericDiagram [String]
 
-rasterize :: SizeSpec V2 Int -> Diagram V2 -> Diagram V2
-rasterize sz d = sizedAs d $ imageEmb $ ImageRGBA8 $ renderImage sz d
+-- rasterize :: SizeSpec V2 Int -> Diagram V2 -> Diagram V2
+-- rasterize sz d = sizedAs d $ imageEmb $ ImageRGBA8 $ renderImage sz d
 
 value :: Monoid m => m -> QDiagram v n Any -> QDiagram v n m
 value m = fmap fromAny
@@ -80,9 +81,9 @@ view :: Model -> [SelectableDiagram]
 view Model{..} = map toSDLCoord $ [layer0, layer1, layer2, layer3] -- [mconcat [layer0, layer1, layer2, layer3]]
  where layer3 = mconcat
            [ scale 50 $ center $ vsep 1
-               [ value [] $ text ("Clock count: " <> showt clockCount) <> phantom (rect 10 1 :: NormalDiagram)
-               , value [] $ text ("Triangle click count: " <> showt triangleClickCount) <> phantom (rect 10 1 :: NormalDiagram)
-               , value [] $ text ("Square click count: " <> showt squareClickCount) <> phantom (rect 10 1 :: NormalDiagram)
+               [ value [] $ text ("Clock count: " <> show clockCount) <> phantom (rect 10 1 :: NormalDiagram)
+               , value [] $ text ("Triangle click count: " <> show triangleClickCount) <> phantom (rect 10 1 :: NormalDiagram)
+               , value [] $ text ("Square click count: " <> show squareClickCount) <> phantom (rect 10 1 :: NormalDiagram)
                , hsep 1
                    [ triangle 1 # fc red # value ["triangle"]
                    , rect 1 1 # fc blue # value ["square"]
@@ -100,7 +101,7 @@ view Model{..} = map toSDLCoord $ [layer0, layer1, layer2, layer3] -- [mconcat [
        sampleSquare :: NormalDiagram
        sampleSquare = rotate (45 @@ deg) $ square 1
 
-updateWithClick :: Text -> Model -> Model
+updateWithClick :: String -> Model -> Model
 updateWithClick "triangle" Model{..} = Model clockCount (triangleClickCount + 1) squareClickCount
 updateWithClick "square" Model{..}   = Model clockCount triangleClickCount (squareClickCount + 1)
 updateWithClick _ model              = model
@@ -108,8 +109,8 @@ updateWithClick _ model              = model
 updateWithTimer :: Model -> Model
 updateWithTimer Model{..} = Model (clockCount + 1) triangleClickCount squareClickCount
 
-sampleRasterImage :: NormalDiagram
-sampleRasterImage = rasterize (mkWidth 100) $ text "a" # fc green <> phantom (rect 1 1 :: NormalDiagram)
+-- sampleRasterImage :: NormalDiagram
+-- sampleRasterImage = rasterize (mkWidth 100) $ text "a" # fc green <> phantom (rect 1 1 :: NormalDiagram)
 
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
@@ -188,7 +189,7 @@ main = do
                     case mouseButtonEventMotion of
                         SDL.Pressed -> do
                             selectableDiagrams <- readIORef vRender
-                            let mClickedObj = headMay $ reverse $ sample (mconcat selectableDiagrams) $ toFloatingPoint $ mouseButtonEventPos
+                            let mClickedObj = listToMaybe $ reverse $ sample (mconcat selectableDiagrams) $ toFloatingPoint $ mouseButtonEventPos
                             mapM_ (modifyIORef vModel . updateWithClick) mClickedObj
                             pushCustomEvent CustomExposeEvent
                             loop

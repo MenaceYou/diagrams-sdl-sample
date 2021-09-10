@@ -1,22 +1,26 @@
 ﻿# For more information, see: https://github.com/commercialhaskell/stack/blob/release/doc/yaml_configuration.md
 
 # Specifies the GHC version and set of packages available (e.g., lts-3.5, nightly-2015-09-21, ghc-7.10.2)
-resolver: lts-12.26
+resolver: lts-17.3
+# lts-17.0
+# nightly-2021-01-02
+# lts-16.20
 # Local packages, usually specified by relative directory name
 packages:
 - '.'
-- active
-- diagrams
-- diagrams-cairo
-- diagrams-rasterific
-- geometry
-- monoid-extras
 
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps: # []
-- ftp-client-0.5.1.1
-- ftp-client-conduit-0.5.0.4
-- spool-0.1
+- active
+- diagrams
+- diagrams-cairo
+- geometry
+- monoid-extras
+- cairo-0.13.8.1
+- pango-0.13.8.1
+- glib-0.13.8.1
+- gtk2hs-buildtools-0.13.8.0
+- palette-0.3.0.2
 
 # Override default flag values for local packages and extra-deps
 flags: {}
@@ -48,7 +52,21 @@ build:
 
 ghc-options:
     # All packages
-    "$locals": -threaded -fwarn-incomplete-patterns -fwarn-missing-signatures -fforce-recomp # -fforce-recomp -fdefer-type-errors -fwarn-unused-imports -Wall -fwarn-unused-binds
+    "$locals":
+        # -fwrite-ide-info
+        -threaded
+        -fno-warn-unused-binds
+        -fno-warn-unused-matches
+        -fno-warn-unused-do-bind
+        -fno-warn-name-shadowing
+        -fno-warn-orphans
+        # -fno-warn-unused-imports
+        # -fno-warn-unused-record-wildcards -- not in GHC 8.4.4
+        # -fno-warn-redundant-record-wildcards -- not in GHC 8.4.4
+        # -fno-warn-unused-packages -- not in GHC 8.4.4
+        # -fno-warn-deriving-defaults -- not in GHC 8.4.4
+        # -fno-warn-missed-extra-shared-lib -- not in GHC 8.4.4
+        # -Wall
 
-# allow-newer: true
+allow-newer: true
 # rebuild-ghc-options: true

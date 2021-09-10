@@ -6,7 +6,6 @@
 {-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE TypeFamilies               #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE OverloadedStrings          #-}
 
 -----------------------------------------------------------------------------
 -- |
@@ -48,7 +47,7 @@ import           Data.Hashable
 
 import           Geometry.Transform
 import           Diagrams.Types.Measure
-import           TextShow
+
 ------------------------------------------------------------
 --  Names  -------------------------------------------------
 ------------------------------------------------------------
@@ -77,7 +76,7 @@ import           TextShow
 --     newtype WordN = WordN Int deriving (Show, Ord, Eq, Typeable, IsName)
 --     instance IsName WordN
 --   @
-class (Typeable a, Hashable a, Eq a, TextShow a) => IsName a where
+class (Typeable a, Hashable a, Eq a, Show a) => IsName a where
   -- | Convert to a name.
   toName :: a -> Name
 
@@ -99,7 +98,7 @@ instance (IsName a, IsName b, IsName c) => IsName (a,b,c)
 -- | Atomic names.  @AName@ is just an existential wrapper around
 --   things which are 'Typeable', 'Ord' and 'Show'.
 data AName where
-  AName :: (Typeable a, Hashable a, Eq a, TextShow a) => a -> AName
+  AName :: (Typeable a, Hashable a, Eq a, Show a) => a -> AName
   deriving Typeable
 
 instance IsName AName where
@@ -116,12 +115,12 @@ instance Hashable AName where
   hashWithSalt s (AName a) = hashWithSalt s a
   {-# INLINE hashWithSalt #-}
 
-instance TextShow AName where
-  showbPrec d (AName a) = showbParen (d > 10) $
-    fromText "AName " <> showbPrec 11 a
+instance Show AName where
+  showsPrec d (AName a) = showParen (d > 10) $
+    showString "AName " . showsPrec 11 a
 
 -- | Prism onto 'AName'.
-_AName :: (Typeable a, Hashable a, Eq a, TextShow a) => Prism' AName a
+_AName :: (Typeable a, Hashable a, Eq a, Show a) => Prism' AName a
 _AName = prism' AName (\(AName a) -> cast a)
 
 -- | A (qualified) name is a (possibly empty) sequence of atomic names.
@@ -154,18 +153,18 @@ instance Each Name Name AName AName where
 -- >>> sumOf eachName ((1::Int) .> (2 :: Integer) .> (3 :: Int)) :: Integer
 -- 2
 -- @
-eachName :: (Typeable a, Hashable a, Eq a, TextShow a) => Traversal' Name a
+eachName :: (Typeable a, Hashable a, Eq a, Show a) => Traversal' Name a
 eachName = each . _AName
 
-instance TextShow Name where
-  showbPrec d (Name xs) = case xs of
-    []     -> showbParen (d > 10) $ fromText "toName []"
-    [n]    -> showbParen (d > 10) $ fromText "toName " <> showbName 11 n
-    (n:ns) -> showbParen (d > 5)  $ showbName 6 n <> go ns
+instance Show Name where
+  showsPrec d (Name xs) = case xs of
+    []     -> showParen (d > 10) $ showString "toName []"
+    [n]    -> showParen (d > 10) $ showString "toName " . showsName 11 n
+    (n:ns) -> showParen (d > 5)  $ showsName 6 n . go ns
       where
-        go (y:ys) = fromText " .> " <> showbName 6 y <> go ys
-        go []     = ""
-    where showbName dd (AName a) = showbPrec dd a
+        go (y:ys) = showString " .> " . showsName 6 y . go ys
+        go []     = id
+    where showsName dd (AName a) = showsPrec dd a
 
 instance IsName Name where
   toName = id

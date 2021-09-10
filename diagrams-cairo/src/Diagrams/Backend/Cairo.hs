@@ -18,6 +18,7 @@
 -----------------------------------------------------------------------------
 module Diagrams.Backend.Cairo where
 
+
 import           Control.Exception               (try)
 import           Control.Monad                   (when)
 import           Control.Monad.IO.Class
@@ -34,7 +35,14 @@ import           System.IO.Unsafe                (unsafePerformIO)
 
 import           Codec.Picture
 import           Codec.Picture.Types             (convertImage, packPixel,
-                                                  promoteImage)
+                                                  promoteImage, dynamicMap)
+
+-- <<< ’Ç‰Á
+-- import Foreign.C.Types
+import Foreign.ForeignPtr.Unsafe (unsafeForeignPtrToPtr)
+import Diagrams.TwoD.Image (dimageSize)
+-- >>> ’Ç‰Á
+
 import qualified Data.Vector.Storable            as SV
 import           Foreign.ForeignPtr              (newForeignPtr)
 import           Foreign.Marshal.Alloc           (finalizerFree)
@@ -55,7 +63,7 @@ import           Diagrams.TwoD.Text              hiding (Font)
 import           Diagrams.Types                  hiding (local)
 
 import           Data.Word                       (Word8)
-import qualified Data.Text as T
+
 
 
 -- | This data declaration is simply used as a token to distinguish
@@ -331,34 +339,32 @@ toImageRGBA8 _               = error "Unsupported Pixel type"
 
 renderEmbedded :: T2 Double -> DynamicImage -> C.Render ()
 renderEmbedded tr dImg = do
-  let img@(Image w h _) = toImageRGBA8 dImg
-  C.save
-  cairoTransf (tr <> reflectionY)
+    let Image w' h' img = toImageRGBA8 dImg
+        w = dynamicMap imageWidth dImg
+        h = dynamicMap imageHeight dImg
+    let (fptr, len) = SV.unsafeToForeignPtr0 img
+        pixelData = castPtr $ unsafeForeignPtrToPtr fptr
+        sz = fromIntegral <$> dims2D w h
+        stride = C.formatStrideForWidth C.FormatARGB32 w'
+    C.save
+    cairoTransf (tr <> reflectionY)
+    surf <- C.liftIO $ C.createImageSurfaceForData pixelData C.FormatARGB32 w' h' stride
+    cairoTransf $ requiredScaling sz (fromIntegral <$> V2 w' h')
+    C.setSourceSurface surf (-fromIntegral w' / 2) (-fromIntegral h' / 2)
+    C.paint
+    C.restore
 
-  let fmt = C.FormatARGB32
-  dataSurf <- liftIO $ C.createImageSurface fmt w h
-
-  surData :: C.SurfaceData Int Word32
-          <- liftIO $ C.imageSurfaceGetPixels dataSurf
-
-  stride <- C.imageSurfaceGetStride dataSurf
-
-  _ <- forMOf imageIPixels img $ \(x, y, px) -> do
-     let p = y * (stride`div`4) + x
-     liftIO . MA.writeArray surData p $ toARGB px
-     return px
-
-  C.surfaceMarkDirty dataSurf
-
-  w' <- C.imageSurfaceGetWidth dataSurf
-  h' <- C.imageSurfaceGetHeight dataSurf
-  let sz = fromIntegral <$> dims2D w h
-  cairoTransf $ requiredScaling sz (fromIntegral <$> V2 w' h')
-  C.setSourceSurface dataSurf (-fromIntegral w' / 2)
-                              (-fromIntegral h' / 2)
-
-  C.paint
-  C.restore
+-- renderNative :: T2 Double -> Int -> Int -> (PixelData, Int, Int) -> C.Render ()
+-- renderNative tr w h (img, w', h') = do
+--     let sz = fromIntegral <$> dims2D w h
+--         stride = C.formatStrideForWidth C.FormatARGB32 w'
+--     C.save
+--     cairoTransf (tr <> reflectionY)
+--     surf <- C.liftIO $ C.createImageSurfaceForData pixelData C.FormatARGB32 w' h' stride
+--     cairoTransf $ requiredScaling sz (fromIntegral <$> V2 w' h')
+--     C.setSourceSurface surf (-fromIntegral w' / 2) (-fromIntegral h' / 2)
+--     C.paint
+--     C.restore
 
 {-# INLINE toARGB #-}
 -- Actually the name should be toBGRA, since that's the component order used by Cairo.
@@ -424,7 +430,7 @@ layoutStyledText tt sty (Text al str) = do
   return layout
 
 data PangoOptions = PangoOptions
-  { pangoFont   :: Maybe T.Text
+  { pangoFont   :: Maybe String
   , pangoSlant  :: FontSlant
   , pangoWeight :: FontWeight
   , pangoSize   :: Double
@@ -440,7 +446,7 @@ instance Default PangoOptions where
 
 lay
   :: PangoOptions
-  -> T.Text
+  -> String
   -> C.Render P.PangoLayout
 lay PangoOptions {..} str = do
   layout <- P.createLayout str
@@ -460,7 +466,7 @@ queryCairo :: C.Render a -> IO a
 queryCairo c = C.withImageSurface C.FormatA1 0 0 (`C.renderWith` c)
 
 -- | Get the bounding box for some pango text
-fontBB :: PangoOptions -> T.Text -> IO (BoundingBox V2 Double)
+fontBB :: PangoOptions -> String -> IO (BoundingBox V2 Double)
 fontBB opts str = do
   layout <- queryCairo $ lay opts str
   -- x0 and y0 correspond to the top left of the text from the cairo origin (top left)
@@ -475,7 +481,7 @@ fontBB opts str = do
 
 pangoTextIO
   :: PangoOptions
-  -> T.Text
+  -> String
   -> IO (Diagram V2)
 pangoTextIO opts@(PangoOptions {..}) str = do
   bb <- fontBB opts str
@@ -490,7 +496,7 @@ pangoTextIO opts@(PangoOptions {..}) str = do
 --   size.
 pangoText'
   :: PangoOptions
-  -> T.Text
+  -> String
   -> Diagram V2
 pangoText' opts str = unsafePerformIO (pangoTextIO opts str)
 
@@ -498,7 +504,7 @@ pangoText' opts str = unsafePerformIO (pangoTextIO opts str)
 --   Font styles do not apply to this text because they would affect the
 --   size.
 pangoText
-  :: T.Text
+  :: String
   -> Diagram V2
 pangoText = pangoText' def
 

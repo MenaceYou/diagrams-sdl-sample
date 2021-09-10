@@ -288,7 +288,7 @@ locatedTrailSegments
   :: OrderedField n
   => Located (Trail V2 n)
   -> [Located (Segment V2 n)]
-locatedTrailSegments t = zipWith at (trailSegments (unLoc t)) (fromLocTrail t)
+locatedTrailSegments t = zipWith at (trailSegments (unLoc t)) (trailPoints t)
 
 -- | Offset a 'Trail' with options and by a given radius.  This generates a new
 --   trail that is always radius 'r' away from the given 'Trail' (depending on
@@ -320,11 +320,11 @@ offsetTrail' opts r t = joinSegments eps j isLoop (opts^.offsetMiterLimit) r end
     where
       eps = opts^.offsetEpsilon
       off = map (bindLoc (offsetSegment eps r)) . locatedTrailSegments
-      ends | isLoop    = (\(a:as) -> as ++ [a]) . fromLocTrail $ t
-           | otherwise = tail . fromLocTrail $ t
+      ends | isLoop    = (\(a:as) -> as ++ [a]) . trailPoints $ t
+           | otherwise = tail . trailPoints $ t
       j = fromLineJoin (opts^.offsetJoin)
 
-      isLoop = withTrail (const False) (const True) (unLoc t)
+      isLoop = has _LocLoop t
 
 -- | Offset a 'Trail' with the default options and a given radius. See
 --   'offsetTrail''.
@@ -518,8 +518,8 @@ capSquare _r c a b = unLoc $ fromVertices [ a, a .+^ v, b .+^ v, b ]
 capArc :: RealFloat n => n -> Point V2 n -> Point V2 n -> Point V2 n -> Trail V2 n
 capArc r c a b = fromLocTrail . moveTo c $ fs
   where
-    fs | r < 0     = scale (-r) $ arcCW  (dirBetween a c) (dirBetween b c)
-       | otherwise = scale r    $ arcCCW (dirBetween a c) (dirBetween b c)
+    fs | r < 0     = scale (-r) $ arcCW  (dirBetween c a) (dirBetween c b)
+       | otherwise = scale r    $ arcCCW (dirBetween c a) (dirBetween c b)
 
 -- | Join together a list of located trails with the given join style.  The
 --   style is given as a function to compute the join given the local information
