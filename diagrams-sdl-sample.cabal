@@ -26,17 +26,7 @@ library
   build-depends:       base, primitive, async
                        , diagrams, colour, palette
                        , diagrams-cairo, cairo
-                       , diagrams-rasterific
                        , sdl2
-                       , JuicyPixels
-                       , deepseq, parallel, linear, data-default-class
-                       , aeson, aeson-pretty, cereal, bits, bytes, cereal-conduit, parsec, parsec-numeric
-                       , time, network, filepath
-                       , spool, vector, array, bytestring, containers, lens, time-lens, split, hashable
-                       , pretty-show, text, text-show, time, directory, safe-exceptions
-                       , optparse-applicative, mtl, safe, iproute, strict-concurrency
-                       , monad-loops
-                       , ftp-client, ftp-client-conduit, conduit-combinators, conduit, conduit-extra, zlib
   ghc-options:         -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole
   default-language:    Haskell2010
 
@@ -49,18 +39,29 @@ executable sample-exe
   build-depends:       diagrams-sdl-sample, base, primitive, async
                        , diagrams, colour, palette
                        , diagrams-cairo, cairo
-                       , diagrams-rasterific
                        , sdl2
-                       , JuicyPixels
-                       , deepseq, parallel, linear, data-default-class
-                       , aeson, aeson-pretty, cereal, bits, bytes, cereal-conduit, parsec, parsec-numeric
-                       , time, network, filepath
-                       , spool, vector, array, bytestring, containers, lens, time-lens, split, hashable
-                       , pretty-show, text, text-show, time, directory, safe-exceptions
-                       , optparse-applicative, mtl, safe, iproute, strict-concurrency
-                       , monad-loops
-                       , ftp-client, ftp-client-conduit, conduit-combinators, conduit, conduit-extra, zlib
   ghc-options:         -threaded -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole
   default-language:    Haskell2010
 
 -- ld-options: -static
+
+test-suite test-exe
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs:
+      test
+  default-extensions:
+      StrictData
+    , TupleSections
+    , LambdaCase
+    , MultiWayIf
+    , RecordWildCards
+    , DerivingStrategies
+    , DeriveGeneric
+    , DeriveAnyClass
+    , GeneralizedNewtypeDeriving
+    , BinaryLiterals
+  ghc-options: -threaded -Wall 
+  build-depends:       base,
+                       cairo
+  default-language: Haskell2010
