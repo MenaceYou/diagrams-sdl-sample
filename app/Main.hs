@@ -10,17 +10,18 @@ import qualified SDL as SDL
 import Foreign.Ptr ( castPtr )
 import qualified Graphics.Rendering.Cairo as Cairo
 
+-- diagrams-cairo
+import Diagrams.Backend.Cairo as Cairo
+
 -- diagrams
 import Diagrams.Prelude hiding (view)
 import Diagrams.TwoD.Text (text)
 
--- diagrams-cairo
-import Diagrams.Backend.Cairo as Cairo
 
 -- base
 import Data.Int (Int32)
 import Data.Word (Word8)
-import Data.IORef (newIORef, writeIORef, readIORef, modifyIORef)
+import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar, modifyMVar_) -- (newIORef, readIORef, writeIORef, modifyIORef)
 import Foreign.Ptr (nullPtr)
 import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
@@ -36,6 +37,9 @@ type SelectableDiagram = GenericDiagram [String]
 
 -- rasterize :: SizeSpec V2 Int -> Diagram V2 -> Diagram V2
 -- rasterize sz d = sizedAs d $ imageEmb $ ImageRGBA8 $ renderImage sz d
+
+modifyMVarPure_ :: MVar a -> (a -> a) -> IO ()
+modifyMVarPure_ var f = modifyMVar_  var $ return . f
 
 value :: Monoid m => m -> QDiagram v n Any -> QDiagram v n m
 value m = fmap fromAny
@@ -97,8 +101,8 @@ screenHeight = 600
 main :: IO ()
 main = do
     -- •ÒW‚Ì‰Šú‰»
-    vModel <- newIORef initialModel
-    vRender <- newIORef $ view initialModel
+    vModel <- newMVar initialModel
+    vRender <- newMVar $ view initialModel
     -- SDL‰Šú‰»
     SDL.initialize [ SDL.InitVideo ]
     window <- SDL.createWindow
@@ -125,7 +129,7 @@ main = do
 
     -- ’èüŠú‚Ìˆ—
     _ <- SDL.addTimer 1000 $ const $ do
-        modifyIORef vModel $ updateWithTimer
+        modifyMVarPure_ vModel $ updateWithTimer
         pushCustomEvent CustomExposeEvent
         return $ SDL.Reschedule 1000
 
@@ -138,7 +142,7 @@ main = do
             mUserEvent <- getCustomEvent event
             forM_ mUserEvent $ \case
                 CustomExposeEvent -> do
-                    model <- readIORef vModel
+                    model <- readMVar vModel
                     putStrLn $ show $ triangleClickCount model
                     let selectableDiagrams = view model
 
@@ -147,14 +151,15 @@ main = do
                     SDL.surfaceBlit sdlSurface Nothing screenSdlSurface Nothing
 
                     SDL.updateWindowSurface window
-                    writeIORef vRender selectableDiagrams
+                    swapMVar vRender selectableDiagrams
+                    return ()
             case SDL.eventPayload event of
                 SDL.MouseButtonEvent SDL.MouseButtonEventData{..} -> do
                     case mouseButtonEventMotion of
                         SDL.Pressed -> do
-                            selectableDiagram <- readIORef vRender
+                            selectableDiagram <- readMVar vRender
                             let mClickedObj = listToMaybe $ reverse $ sample selectableDiagram $ toFloatingPoint $ mouseButtonEventPos
-                            mapM_ (modifyIORef vModel . updateWithClick) mClickedObj
+                            mapM_ (modifyMVarPure_ vModel . updateWithClick) mClickedObj
                             pushCustomEvent CustomExposeEvent
                             loop
                         _           -> loop
