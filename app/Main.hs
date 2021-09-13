@@ -13,20 +13,10 @@ import qualified Graphics.Rendering.Cairo as Cairo
 -- diagrams
 import Diagrams.Prelude hiding (view)
 import Diagrams.TwoD.Text (text)
-import Diagrams.TwoD.Image (imageEmb)
 
 -- diagrams-cairo
-import Diagrams.Backend.Cairo
+import Diagrams.Backend.Cairo as Cairo
 
--- diagrams-rasterific
--- import Diagrams.Backend.Rasterific (renderImage)
-
--- JuicyPixels
--- import Codec.Picture.Types (DynamicImage(..))
-
-import Data.Time
--- import Data.Text (Text)
--- import TextShow
 -- base
 import Data.Int (Int32)
 import Data.Word (Word8)
@@ -35,14 +25,8 @@ import Foreign.Ptr (nullPtr)
 import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
 
--- safe
--- import Safe (headMay)
-
 -- palette
 import Data.Colour.Palette.ColorSet
-
--- async
-import Control.Concurrent.Async (forConcurrently_)
 
 type NormalDiagram = Diagram V2
 
@@ -77,29 +61,19 @@ data Model = Model
 initialModel :: Model
 initialModel = Model 0 0 0
 
-view :: Model -> [SelectableDiagram]
-view Model{..} = map toSDLCoord $ [layer0, layer1, layer2, layer3] -- [mconcat [layer0, layer1, layer2, layer3]]
- where layer3 = mconcat
-           [ scale 50 $ center $ vsep 1
-               [ value [] $ text ("Clock count: " <> show clockCount) <> phantom (rect 10 1 :: NormalDiagram)
-               , value [] $ text ("Triangle click count: " <> show triangleClickCount) <> phantom (rect 10 1 :: NormalDiagram)
-               , value [] $ text ("Square click count: " <> show squareClickCount) <> phantom (rect 10 1 :: NormalDiagram)
-               , hsep 1
-                   [ triangle 1 # fc red # value ["triangle"]
-                   , rect 1 1 # fc blue # value ["square"]
-                   ]
-               ]
-           ]
-       layer2 = sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ sampleTri # fc (d3Colors2 Dark triangleClickCount) # value []
-       layer1 = sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ sampleSquare # fc (d3Colors2 Dark squareClickCount) # value []
-       layer0 = sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ sampleCircle # fc (d3Colors2 Dark clockCount) # value []
-
-       sampleTri :: NormalDiagram
-       sampleTri = triangle 1
-       sampleCircle :: NormalDiagram
-       sampleCircle = circle 1
-       sampleSquare :: NormalDiagram
-       sampleSquare = rotate (45 @@ deg) $ square 1
+view :: Model -> SelectableDiagram
+view Model{..} = toSDLCoord $ mconcat
+    [ scale 50 $ center $ vsep 1
+        [ value [] $ text ("Clock count: " <> show clockCount) <> phantom (rect 10 1 :: NormalDiagram)
+        , value [] $ text ("Triangle click count: " <> show triangleClickCount) <> phantom (rect 10 1 :: NormalDiagram)
+        , value [] $ text ("Square click count: " <> show squareClickCount) <> phantom (rect 10 1 :: NormalDiagram)
+        , hsep 1
+            [ triangle 1 # fc red # value ["triangle"]
+            , rect 1 1 # fc blue # value ["square"]
+            ]
+        ]
+    , sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ circle 1 # fc (d3Colors2 Dark clockCount) # value []
+    ]
 
 updateWithClick :: String -> Model -> Model
 updateWithClick "triangle" Model{..} = Model clockCount (triangleClickCount + 1) squareClickCount
@@ -133,18 +107,10 @@ main = do
     SDL.showWindow window
     
     screenSdlSurface <- SDL.getWindowSurface window
---     scrrenBuffer <- fmap castPtr $ SDL.surfacePixels screenSdlSurface
---     screenCairoSurface <- forM buffers $ \ buffer -> Cairo.createImageSurfaceForData buffer Cairo.FormatRGB24 screenWidth screenHeight (screenWidth * 4)
---     screenCairoSurface 
 
-    sdlSurfaces <- replicateM 4 $ SDL.createRGBSurface (SDL.V2 screenWidth screenHeight) SDL.ARGB8888
-    buffers <- mapM (fmap castPtr . SDL.surfacePixels) sdlSurfaces
-    cairoSurfaces <- forM buffers $ \ buffer -> Cairo.createImageSurfaceForData buffer Cairo.FormatRGB24 screenWidth screenHeight (screenWidth * 4)
-
---     bufferSurface <- Cairo.createImageSurface Cairo.FormatRGB24 screenWidth screenHeight (screenWidth * 4)
---     Cairo.renderWith canvas demo3
---     Cairo.withImageSurfaceForData pixels Cairo.FormatRGB24 600 600 (600 * 4) $ \canvas -> do
---         Cairo.renderWith canvas demo3
+    sdlSurface <- SDL.createRGBSurface (SDL.V2 screenWidth screenHeight) SDL.ARGB8888
+    buffer <- fmap castPtr $ SDL.surfacePixels sdlSurface
+    cairoSurface <- Cairo.createImageSurfaceForData buffer Cairo.FormatRGB24 screenWidth screenHeight (screenWidth * 4)
 
     SDL.updateWindowSurface window
 
@@ -171,37 +137,29 @@ main = do
             event <- SDL.waitEvent
             mUserEvent <- getCustomEvent event
             forM_ mUserEvent $ \case
-                CustomExposeEvent -> measuringTime $ do
+                CustomExposeEvent -> do
                     model <- readIORef vModel
                     putStrLn $ show $ triangleClickCount model
                     let selectableDiagrams = view model
-                    SDL.surfaceFillRect screenSdlSurface Nothing whiteRect
-                    let targets = zip3 sdlSurfaces cairoSurfaces selectableDiagrams
-                    forConcurrently_ targets $ \ (sdlSurface, cairoSurface, diagram) -> do
-                        SDL.surfaceFillRect sdlSurface Nothing alphaRect
-                        Cairo.renderWith cairoSurface $ toRender mempty $ clearValue diagram
-                    forM_ sdlSurfaces $ \ sdlSurface -> do
-                        SDL.surfaceBlit sdlSurface Nothing screenSdlSurface Nothing
+
+                    SDL.surfaceFillRect sdlSurface Nothing whiteRect
+                    Cairo.renderWith cairoSurface $ Cairo.toRender mempty $ clearValue selectableDiagrams
+                    SDL.surfaceBlit sdlSurface Nothing screenSdlSurface Nothing
+
                     SDL.updateWindowSurface window
                     writeIORef vRender selectableDiagrams
             case SDL.eventPayload event of
                 SDL.MouseButtonEvent SDL.MouseButtonEventData{..} -> do
                     case mouseButtonEventMotion of
                         SDL.Pressed -> do
-                            selectableDiagrams <- readIORef vRender
-                            let mClickedObj = listToMaybe $ reverse $ sample (mconcat selectableDiagrams) $ toFloatingPoint $ mouseButtonEventPos
+                            selectableDiagram <- readIORef vRender
+                            let mClickedObj = listToMaybe $ reverse $ sample selectableDiagram $ toFloatingPoint $ mouseButtonEventPos
                             mapM_ (modifyIORef vModel . updateWithClick) mClickedObj
                             pushCustomEvent CustomExposeEvent
                             loop
                         _           -> loop
                 SDL.QuitEvent       -> return ()
                 _                   -> loop
---             let (_, _, r) = renderDiaT (mkOptions $ mkWidth 600 :: Options Cairo) $ a n
---             SDL.surfaceFillRect screenSurface Nothing whiteRect
---             measuringTime $ Cairo.renderWith canvas r
---             if SDL.QuitEvent `elem` map SDL.eventPayload events
---                 then return ()
---                 else loop $ n + 1
     loop
     putStrLn "Exitting"
 
@@ -227,10 +185,3 @@ whiteRect = SDL.V4 maxBound maxBound maxBound maxBound
 alphaRect :: SDL.V4 Word8
 alphaRect = SDL.V4 maxBound maxBound maxBound minBound
 
-measuringTime :: IO () -> IO ()
-measuringTime io = do
-     t1 <- getCurrentTime
-     io
-     t2 <- getCurrentTime
-     let diffTime = diffUTCTime t2 t1
-     putStrLn $ show diffTime
