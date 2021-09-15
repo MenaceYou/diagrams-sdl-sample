@@ -1,13 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 import qualified SDL as SDL
-import Foreign.Ptr ( castPtr )
+import Foreign.Ptr ( castPtr, nullPtr )
 import qualified Graphics.Rendering.Cairo as Cairo
 
 -- diagrams-cairo
@@ -17,17 +13,16 @@ import Diagrams.Backend.Cairo as Cairo
 import Diagrams.Prelude hiding (view)
 import Diagrams.TwoD.Text (text)
 
-
 -- base
 import Data.Int (Int32)
 import Data.Word (Word8)
 import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar, modifyMVar_) -- (newIORef, readIORef, writeIORef, modifyIORef)
-import Foreign.Ptr (nullPtr)
 import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
+import Data.Complex
 
 -- palette
-import Data.Colour.Palette.ColorSet
+-- import Data.Colour.Palette.ColorSet
 
 type NormalDiagram = Diagram V2
 
@@ -54,41 +49,86 @@ resetValue = fmap toAny
 clearValue :: QDiagram v n m -> QDiagram v n Any
 clearValue = fmap (const (Any False))
 
---
+-----------------------------
 
 data Model = Model
-    { clockCount :: Int
-    , triangleClickCount :: Int
-    , squareClickCount :: Int
+    { score :: Int
+    , currentBlocks :: [Complex]
+    , carsorPos :: Complex
+    , blocks :: [Complex]
     }
 
+data Tetrimino
+    = BlockL
+    | BlockL2
+    | BlockT
+    | BlockO
+    | BlockI
+
+tetriminoToBlocks :: Tetrimino -> [Complex]
+tetriminoToBlocks BlockL = [0 :+ 0, 0 :+ 1, 0 :+ 2, 1 :+ 0]
+tetriminoToBlocks BlockL2 = undefined
+tetriminoToBlocks BlockT = undefined
+tetriminoToBlocks BlockO = undefined
+tetriminoToBlocks BlockI = undefined
+
+isColideWall :: Model -> Bool
+isColideWall Model{..} = any isColide' currentBlocks
+ where currentBlocks = map (carsorPos +) currentBlocks
+       isColide' (x :+ y) = or [x <= 0, x >= 10]
+
+isColideBottom :: Model -> Bool
+isColideBottom Model{..} = or
+    [ blocks `intersection` currentBlocks
+    , any isColide' currentBlocks
+    ]
+ where currentBlocks = map (carsorPos +) currentBlocks
+       isColide' (x :+ y) = y <= 0
+
+clearBlock :: [Complex] -> [Complex]
+clearBlock = undefined
+
+routateBlock :: Model -> Model
+routateBlock Model{..} = Model score currentBlocks' carsorPos blocks
+ where currentBlocks' = map ((+ cursorPos) . (* i) . (- cursorPos)) currentBlocks
+
 initialModel :: Model
-initialModel = Model 0 0 0
+initialModel = Model
+    { clockCount = 0
+    , triangleClickCount = 0
+    , squareClickCount = 0
+    }
 
 view :: Model -> SelectableDiagram
-view Model{..} = toSDLCoord $ mconcat
-    [ scale 50 $ center $ vsep 1
-        [ value [] $ text ("Clock count: " <> show clockCount) <> phantom (rect 10 1 :: NormalDiagram)
-        , value [] $ text ("Triangle click count: " <> show triangleClickCount) <> phantom (rect 10 1 :: NormalDiagram)
-        , value [] $ text ("Square click count: " <> show squareClickCount) <> phantom (rect 10 1 :: NormalDiagram)
-        , hsep 1
+view (Model clockCount triangleClickCount squareClickCount) = toSDLCoord $ mconcat
+    [ scale 50 $ center $ vsepEven 10
+        [ value [] $ vsepEven 3
+            [ text ("Clock count: " ++ show clockCount) <> textPhantom
+            , text ("Triangle click count: " ++ show triangleClickCount) <> textPhantom
+            , text ("Square click count: " ++ show squareClickCount) <> textPhantom
+            ]
+        , center $ hsep 1
             [ triangle 1 # fc red # value ["triangle"]
             , rect 1 1 # fc blue # value ["square"]
+            , circle 1 # fc green # value ["circle"]
             ]
         ]
-    , sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ circle 1 # fc (d3Colors2 Dark clockCount) # value []
+    , sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ circle 1 # fc blue # value []
     ]
+ where textPhantom = phantom (rect 10 1 :: NormalDiagram)
+
+
 
 updateWithClick :: String -> Model -> Model
-updateWithClick "triangle" Model{..} = Model clockCount (triangleClickCount + 1) squareClickCount
-updateWithClick "square" Model{..}   = Model clockCount triangleClickCount (squareClickCount + 1)
-updateWithClick _ model              = model
+updateWithClick "triangle" (Model{..}) = Model clockCount (triangleClickCount + 1) squareClickCount
+updateWithClick "square" (Model t n m) = Model t n (m + 1)
+updateWithClick "circle" _ = initialModel -- Model t n (m + 1)
+updateWithClick _ model = model
 
 updateWithTimer :: Model -> Model
-updateWithTimer Model{..} = Model (clockCount + 1) triangleClickCount squareClickCount
+updateWithTimer (Model clockCount triangleClickCount squareClickCount) = Model (clockCount + 1) triangleClickCount squareClickCount
 
--- sampleRasterImage :: NormalDiagram
--- sampleRasterImage = rasterize (mkWidth 100) $ text "a" # fc green <> phantom (rect 1 1 :: NormalDiagram)
+-----------------------------
 
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
@@ -143,15 +183,16 @@ main = do
             forM_ mUserEvent $ \case
                 CustomExposeEvent -> do
                     model <- readMVar vModel
-                    putStrLn $ show $ triangleClickCount model
-                    let selectableDiagrams = view model
+--                     putStrLn $ show $ triangleClickCount model
+                    let selectableDiagram :: SelectableDiagram
+                        selectableDiagram = view model
 
                     SDL.surfaceFillRect sdlSurface Nothing whiteRect
-                    Cairo.renderWith cairoSurface $ Cairo.toRender mempty $ clearValue selectableDiagrams
+                    Cairo.renderWith cairoSurface $ Cairo.toRender mempty $ clearValue selectableDiagram
                     SDL.surfaceBlit sdlSurface Nothing screenSdlSurface Nothing
 
                     SDL.updateWindowSurface window
-                    swapMVar vRender selectableDiagrams
+                    swapMVar vRender selectableDiagram
                     return ()
             case SDL.eventPayload event of
                 SDL.MouseButtonEvent SDL.MouseButtonEventData{..} -> do
@@ -159,7 +200,9 @@ main = do
                         SDL.Pressed -> do
                             selectableDiagram <- readMVar vRender
                             let mClickedObj = listToMaybe $ reverse $ sample selectableDiagram $ toFloatingPoint $ mouseButtonEventPos
-                            mapM_ (modifyMVarPure_ vModel . updateWithClick) mClickedObj
+                            case mClickedObj of
+                                Nothing -> return ()
+                                Just obj -> modifyMVarPure_ vModel $ updateWithClick obj
                             pushCustomEvent CustomExposeEvent
                             loop
                         _           -> loop
