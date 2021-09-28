@@ -20,6 +20,7 @@ import Control.Concurrent.MVar (MVar, newMVar, readMVar, swapMVar, modifyMVar_) 
 import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
 import Data.Complex
+import Data.List (intersect, sortOn, groupBy)
 
 -- palette
 -- import Data.Colour.Palette.ColorSet
@@ -53,80 +54,89 @@ clearValue = fmap (const (Any False))
 
 data Model = Model
     { score :: Int
-    , currentBlocks :: [Complex]
-    , carsorPos :: Complex
-    , blocks :: [Complex]
+    , carsorPos :: Position
+    , orientation :: Orientation   -- Œ»Ý‚Ì‰ñ“]‚Ìó‘Ô‚ðModel“à‚ÉŽ‚Á‚Ä‚¢‚½•û‚ª—Ç‚¢‚Å‚·
+    , currentTetrimino :: Tetrimino
+    , piledBlocks :: [Position]
     }
+
+type Orientation = Int   -- Œ»Ý‚Ì‰ñ“]‚Ìó‘Ô‚Í‚Æ‚è‚ ‚¦‚¸Int‚Ì0`3‚Ì’l‚Å•\‚µ‚Ü‚·
+type Position = Complex Double
+
+i :: Position  -- ‹•”’PˆÊ‚ði‚Æ’è‹`‚µ‚Ä‚¨‚«‚Ü‚·
+i = 0 :+ 1
+
+stage :: [Position]
+stage = concat
+    [ map (:+ 0) [0, 1 .. 10] -- ’ê
+    , map (0 :+) [1 .. 20] -- ¶‚Ì•Ç
+    , map (10 :+) [1 .. 20] -- ‰E‚Ì•Ç
+    ]
 
 data Tetrimino
     = BlockL
-    | BlockL2
+    | BlockJ
     | BlockT
     | BlockO
     | BlockI
+    | BlockS
+    | BlockZ
 
-tetriminoToBlocks :: Tetrimino -> [Complex]
+tetriminoToBlocks :: Tetrimino -> [Position]
 tetriminoToBlocks BlockL = [0 :+ 0, 0 :+ 1, 0 :+ 2, 1 :+ 0]
-tetriminoToBlocks BlockL2 = undefined
+tetriminoToBlocks BlockJ = undefined
 tetriminoToBlocks BlockT = undefined
 tetriminoToBlocks BlockO = undefined
 tetriminoToBlocks BlockI = undefined
+tetriminoToBlocks BlockS = undefined
+tetriminoToBlocks BlockZ = undefined
 
-isColideWall :: Model -> Bool
-isColideWall Model{..} = any isColide' currentBlocks
- where currentBlocks = map (carsorPos +) currentBlocks
-       isColide' (x :+ y) = or [x <= 0, x >= 10]
+reify :: Position -> Orientation -> Tetrimino -> [Position]
+reify pos o block = map (+ pos) $ map rotate $ tetriminoToBlocks block
+ where rotate :: Position -> Position
+       rotate c = c * i ^ o
 
-isColideBottom :: Model -> Bool
-isColideBottom Model{..} = or
-    [ blocks `intersection` currentBlocks
-    , any isColide' currentBlocks
-    ]
- where currentBlocks = map (carsorPos +) currentBlocks
-       isColide' (x :+ y) = y <= 0
+isColide :: Model -> Bool
+isColide Model{..} = null $ (stage ++ piledBlocks) `intersect` currentBlocks 
+ where currentBlocks = reify carsorPos orientation currentTetrimino
 
-clearBlock :: [Complex] -> [Complex]
-clearBlock = undefined
+clearBlock :: [Position] -> [Position]
+clearBlock piledBlocks = concat $ clearBlock' $ toRows piledBlocks
+ where clearBlock' :: [[Position]] -> [[Position]]
+       clearBlock' [] = []
+       clearBlock' (r : rows)
+           | length r == 9 = clearBlock' $ map (map (+ negate i)) rows
+           | otherwise = r : clearBlock' rows
+       toRows :: [Position] -> [[Position]]
+       toRows blocks = groupBy isEqualY $ sortOn getY blocks
+         where isEqualY (x1 :+ y1) (x2 :+ y2) = y1 == y2
+               getY (x :+ y) = y
 
-routateBlock :: Model -> Model
-routateBlock Model{..} = Model score currentBlocks' carsorPos blocks
- where currentBlocks' = map ((+ cursorPos) . (* i) . (- cursorPos)) currentBlocks
+-- routateBlock :: Model -> Model
+-- routateBlock Model{..} = Model score currentBlocks' carsorPos blocks
+--  where currentBlocks' = map ((+ cursorPos) . (* i) . (- cursorPos)) currentBlocks
 
 initialModel :: Model
 initialModel = Model
-    { clockCount = 0
-    , triangleClickCount = 0
-    , squareClickCount = 0
+    { score = 0
+    , carsorPos = 5 :+ 15
+    , orientation = 0
+    , currentTetrimino = BlockL
+    , piledBlocks = []
     }
 
 view :: Model -> SelectableDiagram
-view (Model clockCount triangleClickCount squareClickCount) = toSDLCoord $ mconcat
-    [ scale 50 $ center $ vsepEven 10
-        [ value [] $ vsepEven 3
-            [ text ("Clock count: " ++ show clockCount) <> textPhantom
-            , text ("Triangle click count: " ++ show triangleClickCount) <> textPhantom
-            , text ("Square click count: " ++ show squareClickCount) <> textPhantom
-            ]
-        , center $ hsep 1
-            [ triangle 1 # fc red # value ["triangle"]
-            , rect 1 1 # fc blue # value ["square"]
-            , circle 1 # fc green # value ["circle"]
-            ]
-        ]
-    , sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ circle 1 # fc blue # value []
-    ]
- where textPhantom = phantom (rect 10 1 :: NormalDiagram)
-
-
+view (Model score carsorPos orientation currentTetrimino piledBlocks) = undefined
 
 updateWithClick :: String -> Model -> Model
-updateWithClick "triangle" (Model{..}) = Model clockCount (triangleClickCount + 1) squareClickCount
-updateWithClick "square" (Model t n m) = Model t n (m + 1)
-updateWithClick "circle" _ = initialModel -- Model t n (m + 1)
+updateWithClick "left" Model{..} = undefined
+updateWithClick "right" Model{..} = undefined
+updateWithClick "down" Model{..} = undefined
+updateWithClick "up" Model{..} = undefined
 updateWithClick _ model = model
 
 updateWithTimer :: Model -> Model
-updateWithTimer (Model clockCount triangleClickCount squareClickCount) = Model (clockCount + 1) triangleClickCount squareClickCount
+updateWithTimer Model{..} = undefined
 
 -----------------------------
 
