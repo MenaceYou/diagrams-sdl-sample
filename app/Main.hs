@@ -1,16 +1,19 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE GADTSyntax #-}
 
 import qualified SDL as SDL
 import Foreign.Ptr ( castPtr, nullPtr )
 import qualified Graphics.Rendering.Cairo as Cairo
-
+import qualified SDL.Input.Keyboard.Codes as SDL
 -- diagrams-cairo
 import Diagrams.Backend.Cairo as Cairo
 
 -- diagrams
-import Diagrams.Prelude hiding (view)
+import Diagrams.Prelude hiding (view, Vector, (*^), (^+^), (^-^), signorm)
 import Diagrams.TwoD.Text (text)
 
 -- base
@@ -21,9 +24,235 @@ import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
 import Data.Complex
 import Data.List (intersect, sortOn, groupBy)
+import Data.Tuple (swap)
 
 -- palette
 -- import Data.Colour.Palette.ColorSet
+
+type Vector = (Double, Double)
+type Position = (Double, Double)
+
+----------------------------------------
+-- å„ç¨®ãƒ‘ãƒ©ãƒ¡ã‚¿
+----------------------------------------
+
+gravity :: Vector
+gravity = (0, -0.05)
+
+aDash :: Double
+aDash = 0.1
+
+jump :: Vector
+jump = (0, 0.7)
+
+k :: Double
+k = 0.1
+
+vMax :: Double
+vMax = 0.99
+
+vxMax :: Double
+vxMax = 0.3
+
+roundVelocity :: Vector -> Vector
+roundVelocity v
+    | normV v > vMax = vMax *^ signorm v
+    | otherwise      = v
+
+----------------------------------------
+-- è£œåŠ©é–¢æ•°
+----------------------------------------
+
+projectX ::Vector -> Vector
+projectX (x, y) = (x, 0)
+
+projectY ::Vector -> Vector
+projectY (x, y) = (0, y)
+
+mapPair :: (a -> b) -> (a, a) -> (b, b)
+mapPair f (l, r) = (f l, f r)
+
+(^+^) :: Vector -> Vector -> Vector
+(x1, y1) ^+^ (x2, y2) = (x1 + x2, y1 + y2)
+
+negateV :: Vector -> Vector
+negateV v = (-1) *^ v
+
+(^-^) :: Vector -> Vector -> Vector
+v1 ^-^ v2 = v1 ^+^ negateV v2
+
+normV :: Vector -> Double
+normV (x, y) = sqrt (x^2 + y^2)
+
+signorm :: Vector -> Vector
+signorm v
+    | absV == 0 = (0, 0)
+    | otherwise = (1 / absV) *^ v
+ where absV = normV v
+
+(*^) :: Double -> Vector -> Vector
+a *^ (x, y) = (a * x, a * y)
+
+isGrounded :: Position -> Bool
+isGrounded (x, y) = not $ null $ map (, y - 1) [floor x, ceiling x] `intersect` stage'
+ where stage' :: [(Int, Double)]
+       stage' = map (\ (x, y) -> (x, fromIntegral y)) stage
+
+calcNextPos
+    :: (Double, Double) -- p
+    -> (Double, Double) -- v
+    -> ((Double, Double), (Bool, Bool)) -- p', (isColideX, isColideY)
+calcNextPos p v
+    | normByX == normByY = (posColideX, (isColideX, isColideY))
+    | normByX < normByY  = (posColideX, (isColideX, False))
+    | otherwise          = (posColideY, (False, isColideY))
+ where (normByX, posColideX, isColideX) = calcNextPos' False p v
+       (normByY, posColideY, isColideY) = calcNextPos' True p v
+       calcNextPos'
+           :: Bool
+           -> (Double, Double) -- p
+           -> (Double, Double) -- v
+           -> (Double, (Double, Double), Bool) -- |v|, p'
+       calcNextPos' isSwap pos vec
+--            |  truncate x == truncate (x + vx)
+           | isNotColide              = (normV v, mSwap $ p ^+^ v, False)
+           | otherwise                 = (normV v', mSwap $ p ^+^ v', True)
+        where p@(x, y) = mSwap pos
+              v@(vx, vy) = mSwap vec
+              mSwap
+                  | isSwap = swap
+                  | otherwise = id
+              x' :: Int
+              x' = truncate (x + vx)
+              vx' = fromIntegral x' - x
+              r
+                  | vx == 0   = 1
+                  | otherwise = abs $ vx' / vx
+              v'@(_, vy') = r *^ v
+              y' = y + vy'
+              isNotColide = null $ bs `intersect` stage
+               where bs = map (mSwap . (next x',)) [floor y', ceiling y']
+              truncate :: Double -> Int
+              truncate
+                  | 0 < vx = floor
+                  | otherwise = ceiling
+              next :: Int -> Int
+              next
+                  | 0 < vx = (+1)
+                  | otherwise = subtract 1
+
+----------------------------------------
+-- Model, view, update
+----------------------------------------
+
+data Model = MkModel Position Vector
+
+data Model where
+  MkModel :: Position -> Vector -> Model
+
+playerPos :: Model -> Position
+playerPos (MkModel pos vec) = pos
+velocity :: Model -> Vector
+velocity (MkModel pos vec) = vec
+
+initialModel :: Model
+initialModel = MkModel (5, 15) (0, 0)
+
+stage :: [(Int, Int)]
+stage = concat $ take 3 $ iterate (map (\ (x, y) -> (x + 2, y + 10))) stage'
+ where stage' = concat
+           [ map (, 7) $ concat $ take 10 $ iterate (map (+10)) [5, 6, 7] -- åº•
+           , map (, 4) $ concat $ take 10 $ iterate (map (+10)) [0, 1, 2] -- åº•
+           , map (, 2) $ concat $ take 10 $ iterate (map (+10)) [5, 6, 7] -- åº•
+           , map (, 0) $ concat $ take 10 $ iterate (map (+8)) [0, 1, 2, 3, 4, 5] -- åº•
+           , concat [map (x, ) [1, 2, 3, 4] | x <- [1, 10, 20, 30]] -- å£
+           ]
+
+updateWithTimer :: (SDL.Scancode -> Bool) -> Model -> Model
+updateWithTimer isPressed model = MkModel playerPos' (roundX $ roundY $ velocity')
+ where isLeftPressed :: Bool
+       isLeftPressed = isPressed SDL.ScancodeLeft
+       isRightPressed :: Bool
+       isRightPressed = isPressed SDL.ScancodeRight
+       isUpPressed :: Bool
+       isUpPressed = isPressed SDL.ScancodeUp
+       isLanded :: Bool
+       isLanded = isGrounded $ playerPos model
+
+       (playerPos', (isColideX, isColideY)) = calcNextPos (playerPos model) velocity'
+
+       roundX (vx, vy)
+           | isColideX = (0, vy)
+           | otherwise = (vx, vy)
+
+       roundY (vx, vy)
+           | isColideY = (vx, 0)
+           | otherwise = (vx, vy)
+
+       velocity' :: Vector
+       velocity' = roundVelocity $ friction $ velocity model ^+^ aG ^+^ aL ^+^ aR ^+^ aJ
+
+       friction :: Vector -> Vector
+       friction v@(vx, vy)
+           | haveFriction && abs vx < k = (0, vy)
+           | haveFriction               = v ^-^ (k *^ (signorm $ projectX v))
+           | otherwise                  = v
+        where  haveFriction = and
+                   [ not isLeftPressed
+                   , not isRightPressed
+                   , isLanded
+                   ]
+       
+       aL :: Vector
+       aL
+           | isLeftPressed && isLanded && -vxMax < vx = (- aDash, 0)
+           | otherwise                  = (0, 0)
+        where (vx, _) = velocity model
+
+       aR :: Vector
+       aR
+           | isRightPressed && isLanded && vx < vxMax = (aDash, 0)
+           | otherwise                  = (0, 0)
+        where (vx, _) = velocity model
+
+       aG :: Vector
+       aG
+           | not $ isLanded             = gravity
+           | otherwise                  = (0, 0)
+
+       aJ :: Vector
+       aJ
+           | isUpPressed && isLanded    = jump
+           | otherwise                  = (0, 0)
+
+view :: Model -> SelectableDiagram
+view (MkModel playerPos _)
+    = scale 20
+    $ value []
+    $ translateV (negateV playerPos)
+    $ mconcat
+    $ map drawOneBlock
+    $ playerPos : stage'
+ where drawOneBlock :: Position -> NormalDiagram
+       drawOneBlock v = translateV v r
+       translateV :: Position -> NormalDiagram -> NormalDiagram
+       translateV (x, y) = translate (V2 x y)
+       r = rect 1 1
+       stage' = map (mapPair fromIntegral) stage
+
+updateWithClick :: String -> Model -> Model
+updateWithClick button model = model
+
+-- updateWithKeyPress :: SDL.Keycode -> Model -> Model
+-- updateWithKeyPress SDL.KeycodeUp (MkModel pos vec)
+--     | isGrounded pos = MkModel pos $ vec ^+^ jump
+--     | otherwise      = MkModel pos vec
+updateWithKeyPress :: SDL.Keycode -> Model -> Model
+updateWithKeyPress _ model = model
+
+----------------------------------------
+-- GUIã®ã‚ã‚Œã“ã‚Œ
+----------------------------------------
 
 type NormalDiagram = Diagram V2
 
@@ -50,96 +279,6 @@ resetValue = fmap toAny
 clearValue :: QDiagram v n m -> QDiagram v n Any
 clearValue = fmap (const (Any False))
 
------------------------------
-
-data Model = Model
-    { score :: Int
-    , carsorPos :: Position
-    , orientation :: Orientation   -- Œ»İ‚Ì‰ñ“]‚Ìó‘Ô‚ğModel“à‚É‚Á‚Ä‚¢‚½•û‚ª—Ç‚¢‚Å‚·
-    , currentTetrimino :: Tetrimino
-    , piledBlocks :: [Position]
-    }
-
-type Orientation = Int   -- Œ»İ‚Ì‰ñ“]‚Ìó‘Ô‚Í‚Æ‚è‚ ‚¦‚¸Int‚Ì0`3‚Ì’l‚Å•\‚µ‚Ü‚·
-type Position = Complex Double
-
-i :: Position  -- ‹•”’PˆÊ‚ği‚Æ’è‹`‚µ‚Ä‚¨‚«‚Ü‚·
-i = 0 :+ 1
-
-stage :: [Position]
-stage = concat
-    [ map (:+ 0) [0, 1 .. 10] -- ’ê
-    , map (0 :+) [1 .. 20] -- ¶‚Ì•Ç
-    , map (10 :+) [1 .. 20] -- ‰E‚Ì•Ç
-    ]
-
-data Tetrimino
-    = BlockL
-    | BlockJ
-    | BlockT
-    | BlockO
-    | BlockI
-    | BlockS
-    | BlockZ
-
-tetriminoToBlocks :: Tetrimino -> [Position]
-tetriminoToBlocks BlockL = [0 :+ 0, 0 :+ 1, 0 :+ 2, 1 :+ 0]
-tetriminoToBlocks BlockJ = undefined
-tetriminoToBlocks BlockT = undefined
-tetriminoToBlocks BlockO = undefined
-tetriminoToBlocks BlockI = undefined
-tetriminoToBlocks BlockS = undefined
-tetriminoToBlocks BlockZ = undefined
-
-reify :: Position -> Orientation -> Tetrimino -> [Position]
-reify pos o block = map (+ pos) $ map rotate $ tetriminoToBlocks block
- where rotate :: Position -> Position
-       rotate c = c * i ^ o
-
-isColide :: Model -> Bool
-isColide Model{..} = null $ (stage ++ piledBlocks) `intersect` currentBlocks 
- where currentBlocks = reify carsorPos orientation currentTetrimino
-
-clearBlock :: [Position] -> [Position]
-clearBlock piledBlocks = concat $ clearBlock' $ toRows piledBlocks
- where clearBlock' :: [[Position]] -> [[Position]]
-       clearBlock' [] = []
-       clearBlock' (r : rows)
-           | length r == 9 = clearBlock' $ map (map (+ negate i)) rows
-           | otherwise = r : clearBlock' rows
-       toRows :: [Position] -> [[Position]]
-       toRows blocks = groupBy isEqualY $ sortOn getY blocks
-         where isEqualY (x1 :+ y1) (x2 :+ y2) = y1 == y2
-               getY (x :+ y) = y
-
--- routateBlock :: Model -> Model
--- routateBlock Model{..} = Model score currentBlocks' carsorPos blocks
---  where currentBlocks' = map ((+ cursorPos) . (* i) . (- cursorPos)) currentBlocks
-
-initialModel :: Model
-initialModel = Model
-    { score = 0
-    , carsorPos = 5 :+ 15
-    , orientation = 0
-    , currentTetrimino = BlockL
-    , piledBlocks = []
-    }
-
-view :: Model -> SelectableDiagram
-view (Model score carsorPos orientation currentTetrimino piledBlocks) = undefined
-
-updateWithClick :: String -> Model -> Model
-updateWithClick "left" Model{..} = undefined
-updateWithClick "right" Model{..} = undefined
-updateWithClick "down" Model{..} = undefined
-updateWithClick "up" Model{..} = undefined
-updateWithClick _ model = model
-
-updateWithTimer :: Model -> Model
-updateWithTimer Model{..} = undefined
-
------------------------------
-
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
 
@@ -150,10 +289,10 @@ screenHeight = 600
 
 main :: IO ()
 main = do
-    -- •ÒW‚Ì‰Šú‰»
+    -- ç·¨é›†ã®åˆæœŸåŒ–
     vModel <- newMVar initialModel
     vRender <- newMVar $ view initialModel
-    -- SDL‰Šú‰»
+    -- SDLåˆæœŸåŒ–
     SDL.initialize [ SDL.InitVideo ]
     window <- SDL.createWindow
         "SDL / Cairo Example"
@@ -168,7 +307,7 @@ main = do
 
     SDL.updateWindowSurface window
 
-    -- UserƒCƒxƒ“ƒg‚Ì“o˜^
+    -- Userã‚¤ãƒ™ãƒ³ãƒˆã®ç™»éŒ²
     mRegisteredEventType <- SDL.registerEvent decodeUserEvent encodeUserEvent
     let pushCustomEvent :: CustomEvent -> IO ()
         pushCustomEvent userEvent = forM_ mRegisteredEventType $ \ regEventType -> SDL.pushRegisteredEvent regEventType userEvent
@@ -177,15 +316,16 @@ main = do
             Nothing -> return $ Nothing
             Just regEventType -> SDL.getRegisteredEvent regEventType event
 
-    -- ’èüŠú‚Ìˆ—
-    _ <- SDL.addTimer 1000 $ const $ do
-        modifyMVarPure_ vModel $ updateWithTimer
+    -- å®šå‘¨æœŸã®å‡¦ç†
+    _ <- SDL.addTimer 33 $ const $ do
+        isPressed <- SDL.getKeyboardState
+        modifyMVarPure_ vModel $ updateWithTimer isPressed
         pushCustomEvent CustomExposeEvent
-        return $ SDL.Reschedule 1000
+        return $ SDL.Reschedule 33
 
     pushCustomEvent CustomExposeEvent
     
-    -- Eventƒnƒ“ƒhƒ‰
+    -- Eventãƒãƒ³ãƒ‰ãƒ©
     let loop :: IO ()
         loop = do
             event <- SDL.waitEvent
@@ -195,7 +335,7 @@ main = do
                     model <- readMVar vModel
 --                     putStrLn $ show $ triangleClickCount model
                     let selectableDiagram :: SelectableDiagram
-                        selectableDiagram = view model
+                        selectableDiagram = toSDLCoord $ view model
 
                     SDL.surfaceFillRect sdlSurface Nothing whiteRect
                     Cairo.renderWith cairoSurface $ Cairo.toRender mempty $ clearValue selectableDiagram
@@ -216,6 +356,11 @@ main = do
                             pushCustomEvent CustomExposeEvent
                             loop
                         _           -> loop
+                SDL.KeyboardEvent SDL.KeyboardEventData{..} | keyboardEventKeyMotion == SDL.Pressed -> do
+                    let SDL.Keysym _ key SDL.KeyModifier{..} = keyboardEventKeysym
+                    modifyMVarPure_ vModel $ updateWithKeyPress key
+                    pushCustomEvent CustomExposeEvent
+                    loop
                 SDL.QuitEvent       -> return ()
                 _                   -> loop
     loop
