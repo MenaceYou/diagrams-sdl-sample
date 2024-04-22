@@ -1,11 +1,3 @@
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE TupleSections #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE OverloadedStrings #-}
-
 import qualified SDL as SDL
 import Foreign.Ptr ( castPtr )
 import qualified Graphics.Rendering.Cairo as Cairo
@@ -28,29 +20,7 @@ import Data.Maybe (listToMaybe)
 -- palette
 import Data.Colour.Palette.ColorSet
 
-type NormalDiagram = Diagram V2
-
-type GenericDiagram a = QDiagram V2 Double a
-
-type SelectableDiagram = GenericDiagram [String]
-
--- rasterize :: SizeSpec V2 Int -> Diagram V2 -> Diagram V2
--- rasterize sz d = sizedAs d $ imageEmb $ ImageRGBA8 $ renderImage sz d
-
-value :: Monoid m => m -> QDiagram v n Any -> QDiagram v n m
-value m = fmap fromAny
-  where fromAny (Any True)  = m
-        fromAny (Any False) = mempty
-
-resetValue :: (Eq m, Monoid m) => QDiagram v n m -> QDiagram v n Any
-resetValue = fmap toAny
-  where toAny m | m == mempty = Any False
-                | otherwise   = Any True
-
-clearValue :: QDiagram v n m -> QDiagram v n Any
-clearValue = fmap (const (Any False))
-
---
+-- Model, view, update
 
 data Model = Model
     { clockCount :: Int
@@ -80,11 +50,10 @@ updateWithClick "triangle" Model{..} = Model clockCount (triangleClickCount + 1)
 updateWithClick "square" Model{..}   = Model clockCount triangleClickCount (squareClickCount + 1)
 updateWithClick _ model              = model
 
+-- ÇªÇÃëº
+
 updateWithTimer :: Model -> Model
 updateWithTimer Model{..} = Model (clockCount + 1) triangleClickCount squareClickCount
-
--- sampleRasterImage :: NormalDiagram
--- sampleRasterImage = rasterize (mkWidth 100) $ text "a" # fc green <> phantom (rect 1 1 :: NormalDiagram)
 
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
@@ -96,6 +65,7 @@ screenHeight = 600
 
 main :: IO ()
 main = do
+    putStrLn "Starting"
     -- ï“èWÇÃèâä˙âª
     vModel <- newIORef initialModel
     vRender <- newIORef $ view initialModel
@@ -185,3 +155,23 @@ whiteRect = SDL.V4 maxBound maxBound maxBound maxBound
 alphaRect :: SDL.V4 Word8
 alphaRect = SDL.V4 maxBound maxBound maxBound minBound
 
+-- diagramsä÷òA
+
+type NormalDiagram = Diagram V2
+
+type GenericDiagram a = QDiagram V2 Double a
+
+type SelectableDiagram = GenericDiagram [String]
+
+value :: Monoid m => m -> QDiagram v n Any -> QDiagram v n m
+value m = fmap fromAny
+  where fromAny (Any True)  = m
+        fromAny (Any False) = mempty
+
+resetValue :: (Eq m, Monoid m) => QDiagram v n m -> QDiagram v n Any
+resetValue = fmap toAny
+  where toAny m | m == mempty = Any False
+                | otherwise   = Any True
+
+clearValue :: QDiagram v n m -> QDiagram v n Any
+clearValue = fmap (const (Any False))

@@ -18,6 +18,18 @@ cabal-version:       >=1.10
 library
   hs-source-dirs:      src
   exposed-modules:     Lib
+  default-extensions:
+      StrictData
+    , TupleSections
+    , LambdaCase
+    , MultiWayIf
+    , RecordWildCards
+    , DerivingStrategies
+    , DeriveGeneric
+    , DeriveAnyClass
+    , GeneralizedNewtypeDeriving
+    , BinaryLiterals
+    , OverloadedStrings
 
   other-extensions:    NoMonomorphismRestriction, TemplateHaskell
                        , TupleSections, FlexibleContexts, TypeFamilies
