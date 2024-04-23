@@ -1,3 +1,5 @@
+import GHC.Generics (Generic)
+
 import qualified SDL as SDL
 import Foreign.Ptr ( castPtr )
 import qualified Graphics.Rendering.Cairo as Cairo
@@ -20,13 +22,17 @@ import Data.Maybe (listToMaybe)
 -- palette
 import Data.Colour.Palette.ColorSet
 
+-- lens, generic-lens
+import Control.Lens hiding (view, (#))
+import Data.Generics.Labels()
+
 -- Model, view, update
 
 data Model = Model
     { clockCount :: Int
     , triangleClickCount :: Int
     , squareClickCount :: Int
-    }
+    } deriving (Generic, Show)
 
 initialModel :: Model
 initialModel = Model 0 0 0

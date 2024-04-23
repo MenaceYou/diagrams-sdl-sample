@@ -30,6 +30,15 @@ library
     , GeneralizedNewtypeDeriving
     , BinaryLiterals
     , OverloadedStrings
+    -- generic-lens用
+    , DataKinds
+    , DuplicateRecordFields
+    , FlexibleContexts
+    , MultiParamTypeClasses
+    , OverloadedLabels
+    , AllowAmbiguousTypes
+    , NoMonomorphismRestriction
+    , TypeApplications
 
   other-extensions:    NoMonomorphismRestriction, TemplateHaskell
                        , TupleSections, FlexibleContexts, TypeFamilies
@@ -40,7 +49,9 @@ library
                        , diagrams-cairo, cairo
                        , sdl2
                        , time
-  ghc-options:         -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole
+                       , generic-lens
+                       , lens
+  ghc-options:         -fwarn-incomplete-patterns -fwarn-missing-signatures -optl-mconsole -Werror -Wall
   default-language:    Haskell2010
 
 executable sample-exe
