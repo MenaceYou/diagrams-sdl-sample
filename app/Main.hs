@@ -23,8 +23,8 @@ import Data.Maybe (listToMaybe)
 import Data.Colour.Palette.ColorSet
 
 -- lens, generic-lens
-import Control.Lens hiding (view, (#))
-import Data.Generics.Labels()
+-- import Control.Lens()
+-- import Data.Generics.Labels()
 
 -- Model, view, update
 
@@ -48,7 +48,18 @@ view Model{..} = toSDLCoord $ mconcat
             , rect 1 1 # fc blue # value ["square"]
             ]
         ]
-    , sized (mkHeight screenHeight) $ center $ vcat $ replicate triangleClickCount $ hcat $ replicate triangleClickCount $ circle 1 # fc (d3Colors2 Dark clockCount) # value []
+    , sized (mkHeight screenHeight)
+        $ center
+        $ vcat
+        $ replicate triangleClickCount
+        $ hcat
+        $ replicate triangleClickCount
+        $ circle 1 # fc (d3Colors2 Dark clockCount) # value []
+    ]
+
+triangleAndCircle = mconcat
+    [ center $ hcat $ replicate 3 $ circle 1
+    , triangle 1
     ]
 
 updateWithClick :: String -> Model -> Model
@@ -112,7 +123,7 @@ main = do
         loop = do
             event <- SDL.waitEvent
             mUserEvent <- getCustomEvent event
-            forM_ mUserEvent $ \case
+            forM_ mUserEvent $ \ case
                 CustomExposeEvent -> do
                     model <- readIORef vModel
                     putStrLn $ show $ triangleClickCount model
