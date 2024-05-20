@@ -77,7 +77,7 @@ rotate90 :: Position -> Position
 rotate90 (x, y) = (x', y')
  where
     x' :+ y' = (x :+ y) * (0 :+ 1)
-
+--comment
 
 reify :: Tetrimino -> Position -> Orientation -> [Position]
 reify t (x,  y) o = map shift $ map (rotateByOrientation o) $ fromTetriminoToBlocks t
