@@ -19,6 +19,7 @@ import Foreign.Ptr (nullPtr)
 import Control.Monad (forM, forM_, replicateM)
 import Data.Maybe (listToMaybe)
 import Data.Complex
+import Data.List
 
 -- palette
 import Data.Colour.Palette.ColorSet
@@ -73,25 +74,33 @@ rotateByOrientation Orient90 pos = rotate90 pos
 rotateByOrientation Orient180 pos = rotate90 $ rotate90 pos
 rotateByOrientation Orient270 pos = rotate90 $ rotate90 $ rotate90 pos
 
+
+
 rotate90 :: Position -> Position
 rotate90 (x, y) = (x', y')
  where
     x' :+ y' = (x :+ y) * (0 :+ 1)
---comment
 
-reify :: Tetrimino -> Position -> Orientation -> [Position]
-reify t (x,  y) o = map shift $ map (rotateByOrientation o) $ fromTetriminoToBlocks t
+reify :: Model -> [Position]
+reify (Model t (x,  y) o bs _) = concat
+    [ reifyTetrimino t (x, y) o, bs ]
+
+
+reifyTetrimino :: Tetrimino -> Position -> Orientation -> [Position]
+reifyTetrimino t (x, y) o = map shift $ map (rotateByOrientation o) $ fromTetriminoToBlocks t
  where
     shift :: Position -> Position
     shift (a, b) = (a + x, b + y)
 
+sourcePosition :: Position
+sourcePosition = (5, 19)
 
 initialModel :: Model
 initialModel = Model
     { currentTetrimino = BlockT
-    , currentCursorPos = (5, 19)
+    , currentCursorPos = sourcePosition
     , currentOrientation = Orient0
-    , currentBlocks = [(x, 0) | x <- [0..11]] ++ [(0, y) | y <- [0..20]] ++ [(11, y) | y <- [0..20]]
+    , currentBlocks = nub $ [(x, 0) | x <- [0..11]] ++ [(0, y) | y <- [0..20]] ++ [(11, y) | y <- [0..20]]
     , score = 0
     }
 renderBlocks :: [Position] -> NormalDiagram
@@ -101,9 +110,9 @@ renderBlocks bs = mconcat $ map renderBlock bs
     renderBlock (x, y) = translate (V2 x y) sq
 
 view :: Model -> SelectableDiagram
-view Model{..} = toSDLCoord $ center $ scale 20 $ hsep 3
+view model = toSDLCoord $ center $ scale 20 $ hsep 3
     [ controlPanel
-    , value [] $ renderBlocks $ currentBlocks ++ reify currentTetrimino currentCursorPos currentOrientation
+    , value [] $ renderBlocks $ reify model
             --, rect 1 1 # fc blue # value ["square"]    
     ]
 
@@ -120,14 +129,22 @@ controlPanel = center $ vsep 0.2
 
     where button str = square 1 # value [str]
 
+hasDuplication :: [Position] -> Bool
+hasDuplication ps = any ((>1) . length) $ group $ sort ps
 
 
 updateWithClick :: String -> Model -> Model
-updateWithClick "left" (Model t (x, y) o bs s) = Model t (x - 1, y) o bs s
-updateWithClick "right" (Model t (x, y) o bs s) = Model t (x + 1, y) o bs s
-updateWithClick "down" (Model t (x, y) o bs s) = Model t (x, y - 1) o bs s
-updateWithClick "up" (Model t (x, y) o bs s) = Model t (x, y) (incrementOrientation o) bs s
-updateWithClick _ model = model
+updateWithClick button (Model t (x, y) o bs s)
+    | hasDuplication (reify model') = Model t (x, y) o bs s
+    | otherwise                     = model'
+ where
+    model' = case button of
+        "left"  -> Model t (x - 1, y) o bs s
+        "right" -> Model t (x + 1, y) o bs s
+        "down"  -> Model t (x, y - 1) o bs s
+        "up"    -> Model t (x, y) (incrementOrientation o) bs s
+        _       -> Model t (x, y) o bs s
+
 
 incrementOrientation :: Orientation -> Orientation
 incrementOrientation Orient0 = Orient90
@@ -139,7 +156,12 @@ incrementOrientation Orient270 = Orient0
 -- ���̑�
 
 updateWithTimer :: Model -> Model
-updateWithTimer model = model
+updateWithTimer (Model t (x, y) o bs s)
+    | hasDuplication (reify model') = Model t sourcePosition o (bs ++ piledBlocks) s
+    | otherwise                     = model'
+ where
+    model' = Model t (x, y - 1) o bs s
+    piledBlocks = reifyTetrimino t (x, y) o
 
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
