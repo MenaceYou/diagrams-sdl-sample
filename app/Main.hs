@@ -23,6 +23,10 @@ import Data.List
 
 -- palette
 import Data.Colour.Palette.ColorSet
+import System.Random
+import Data.Time.Clock.POSIX
+import Data.Time
+import Data.Int
 
 -- lens, generic-lens
 -- import Control.Lens()
@@ -32,7 +36,7 @@ import Data.Colour.Palette.ColorSet
 
 type Position = (Double, Double)
 sq :: NormalDiagram
-sq = rect 1 1
+sq = rect 1 1 # lc black # fc gray
 
 data Tetrimino
     = BlockO
@@ -65,7 +69,7 @@ fromTetriminoToBlocks BlockI = [(0, 2), (0, 1), (0, 0), (0, -1)]
 fromTetriminoToBlocks BlockT = [(-1, 0), (0, 0), (1, 0), (0, -1)]
 fromTetriminoToBlocks BlockL = [(0, 2), (0, 1), (0, 0), (1, 0)]
 fromTetriminoToBlocks BlockJ = [(0, 2), (0, 1), (0, 0), (-1, 0)]
-fromTetriminoToBlocks BlockZ = [(-1, -1), (0, 1), (0, 0), (1, 0)]
+fromTetriminoToBlocks BlockZ = [(-1, 1), (0, 1), (0, 0), (1, 0)]
 fromTetriminoToBlocks BlockS = [(1, 1), (0, 1), (0, 0), (-1, 0)]
 
 rotateByOrientation :: Orientation -> Position -> Position
@@ -95,14 +99,37 @@ reifyTetrimino t (x, y) o = map shift $ map (rotateByOrientation o) $ fromTetrim
 sourcePosition :: Position
 sourcePosition = (5, 19)
 
-initialModel :: Model
-initialModel = Model
-    { currentTetrimino = BlockT
+blockChooser :: [Int] -> Tetrimino
+blockChooser l =
+    case l of
+        [] -> BlockT
+        r:rs -> (case r of
+            1 -> BlockO
+            2 -> BlockI
+            3 -> BlockT
+            4 -> BlockL
+            5 -> BlockJ
+            6 -> BlockZ
+            7 -> BlockS
+            _ -> BlockT)
+
+initialModel :: Int -> Model
+initialModel n = Model
+    --{ currentTetrimino = BlockT
+    --, currentCursorPos = sourcePosition
+    --, currentOrientation = Orient0
+    --, currentBlocks = nub $ [(x, 0) | x <- [0..11]] ++ [(0, y) | y <- [0..20]] ++ [(11, y) | y <- [0..20]]
+    --, score = 0
+    --}
+
+    --{ currentTetrimino = chooser (take 1 $ randomRs (1, 7) (mkStdGen 124))
+    { currentTetrimino = blockChooser [n]
     , currentCursorPos = sourcePosition
     , currentOrientation = Orient0
     , currentBlocks = nub $ [(x, 0) | x <- [0..11]] ++ [(0, y) | y <- [0..20]] ++ [(11, y) | y <- [0..20]]
     , score = 0
     }
+        
 renderBlocks :: [Position] -> NormalDiagram
 renderBlocks bs = mconcat $ map renderBlock bs
  where 
@@ -111,23 +138,26 @@ renderBlocks bs = mconcat $ map renderBlock bs
 
 view :: Model -> SelectableDiagram
 view model = toSDLCoord $ center $ scale 20 $ hsep 3
-    [ controlPanel
+    [ controlPanel model
     , value [] $ renderBlocks $ reify model
-            --, rect 1 1 # fc blue # value ["square"]    
     ]
 
-
-controlPanel :: SelectableDiagram
-controlPanel = center $ vsep 0.2
-    [button "up"
+controlPanel :: Model -> SelectableDiagram
+controlPanel model = center $ vsep 1
+    [value [] $ text ("score:" <> show (score model))
     ,center $ hsep 0.2
-        [button "left"
-        ,button "down"
-        ,button "right"
+        [button "orient"
+        ,center $ hsep 0.2
+            [button "left"
+            ,button "down"
+            ,button "right"
+            ]
         ]
     ]
 
-    where button str = square 1 # value [str]
+
+    where button str = square 1 # lc black # fc gray # value [str]
+
 
 hasDuplication :: [Position] -> Bool
 hasDuplication ps = any ((>1) . length) $ group $ sort ps
@@ -139,11 +169,11 @@ updateWithClick button (Model t (x, y) o bs s)
     | otherwise                     = model'
  where
     model' = case button of
-        "left"  -> Model t (x - 1, y) o bs s
-        "right" -> Model t (x + 1, y) o bs s
-        "down"  -> Model t (x, y - 1) o bs s
-        "up"    -> Model t (x, y) (incrementOrientation o) bs s
-        _       -> Model t (x, y) o bs s
+        "left"   -> Model t (x - 1, y) o bs s
+        "right"  -> Model t (x + 1, y) o bs s
+        "down"   -> Model t (x, y - 1) o bs s
+        "orient" -> Model t (x, y) (incrementOrientation o) bs s
+        _        -> Model t (x, y) o bs s
 
 
 incrementOrientation :: Orientation -> Orientation
@@ -154,7 +184,6 @@ incrementOrientation Orient270 = Orient0
 
 
 -- ���̑�
-
 updateWithTimer :: Model -> Model
 updateWithTimer (Model t (x, y) o bs s)
     | hasDuplication (reify model') = Model t sourcePosition o (bs ++ piledBlocks) s
@@ -162,6 +191,16 @@ updateWithTimer (Model t (x, y) o bs s)
  where
     model' = Model t (x, y - 1) o bs s
     piledBlocks = reifyTetrimino t (x, y) o
+
+{-updateWithTimer :: Int -> Model -> Model
+updateWithTimer pr (Model _ (x, y) o bs s)
+    | hasDuplication (reify model') = Model nextTetrimino sourcePosition o (bs ++ piledBlocks) s
+    | otherwise                     = model'
+ where
+    nextTetrimino = blockChooser [pr]
+    model' = Model nextTetrimino (x, y - 1) o bs s
+    piledBlocks = reifyTetrimino nextTetrimino (x, y) o
+-}
 
 fullHDRect :: NormalDiagram
 fullHDRect = rect screenWidth screenHeight # fc white
@@ -171,12 +210,27 @@ screenWidth = 800
 screenHeight :: Num a => a
 screenHeight = 600
 
+cnv2sec :: UTCTime -> Int
+cnv2sec = floor . (1e9 *) . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds
+
+pickRand :: [Int] -> (Int,[Int])  
+pickRand box = ((head box), (tail box))
+
 main :: IO ()
 main = do
     putStrLn "Starting"
+    timeNow <- getCurrentTime
+    let seed = cnv2sec timeNow
+
+    --let randBox = randomRs (1, 7) (mkStdGen seed)
+    vRandBox <- newIORef $ randomRs (1, 7) (mkStdGen seed)
+
     -- �ҏW�̏�����
-    vModel <- newIORef initialModel
-    vRender <- newIORef $ view initialModel
+    randBox <- readIORef vRandBox
+    let (rand, sndRand) = pickRand randBox
+    writeIORef vRandBox sndRand
+    vModel <- newIORef $ initialModel rand
+    vRender <- newIORef $ view (initialModel rand)
     -- SDL������
     SDL.initialize [ SDL.InitVideo ]
     window <- SDL.createWindow
@@ -203,6 +257,9 @@ main = do
 
     -- ������̏���
     _ <- SDL.addTimer 1000 $ const $ do
+        --xRandBox <- readIORef vRandBox
+        --let (rand', _) = pickRand xRandBox
+        --modifyIORef vModel $ updateWithTimer rand'
         modifyIORef vModel $ updateWithTimer
         pushCustomEvent CustomExposeEvent
         return $ SDL.Reschedule 1000
@@ -216,6 +273,10 @@ main = do
             mUserEvent <- getCustomEvent event
             forM_ mUserEvent $ \ case
                 CustomExposeEvent -> do
+                    randBox <- readIORef vRandBox
+                    let (_, sndRand) = pickRand randBox
+                    _ <- writeIORef vRandBox sndRand
+
                     model <- readIORef vModel
                     --putStrLn $ show $ triangleClickCount model
                     let selectableDiagrams = view model
