@@ -78,23 +78,10 @@ rotateByOrientation Orient90 pos = rotate90 pos
 rotateByOrientation Orient180 pos = rotate90 $ rotate90 pos
 rotateByOrientation Orient270 pos = rotate90 $ rotate90 $ rotate90 pos
 
-
-
 rotate90 :: Position -> Position
 rotate90 (x, y) = (x', y')
  where
     x' :+ y' = (x :+ y) * (0 :+ 1)
-
-reify :: Model -> [Position]
-reify (Model t (x,  y) o bs _) = concat
-    [ reifyTetrimino t (x, y) o, bs ]
-
-
-reifyTetrimino :: Tetrimino -> Position -> Orientation -> [Position]
-reifyTetrimino t (x, y) o = map shift $ map (rotateByOrientation o) $ fromTetriminoToBlocks t
- where
-    shift :: Position -> Position
-    shift (a, b) = (a + x, b + y)
 
 sourcePosition :: Position
 sourcePosition = (5, 19)
@@ -115,13 +102,6 @@ blockChooser l =
 
 initialModel :: Int -> Model
 initialModel n = Model
-    --{ currentTetrimino = BlockT
-    --, currentCursorPos = sourcePosition
-    --, currentOrientation = Orient0
-    --, currentBlocks = nub $ [(x, 0) | x <- [0..11]] ++ [(0, y) | y <- [0..20]] ++ [(11, y) | y <- [0..20]]
-    --, score = 0
-    --}
-
     --{ currentTetrimino = chooser (take 1 $ randomRs (1, 7) (mkStdGen 124))
     { currentTetrimino = blockChooser [n]
     , currentCursorPos = sourcePosition
@@ -154,15 +134,14 @@ controlPanel model = center $ vsep 1
             ]
         ]
     ]
-
-
     where button str = square 1 # lc black # fc gray # value [str]
-
 
 hasDuplication :: [Position] -> Bool
 hasDuplication ps = any ((>1) . length) $ group $ sort ps
-
-
+{-
+hasDuplication2 :: [Position] -> [Position]
+hasDuplication2 qs = any ((>1) . length) $ group $ sort qs
+-}
 updateWithClick :: String -> Model -> Model
 updateWithClick button (Model t (x, y) o bs s)
     | hasDuplication (reify model') = Model t (x, y) o bs s
@@ -175,31 +154,51 @@ updateWithClick button (Model t (x, y) o bs s)
         "orient" -> Model t (x, y) (incrementOrientation o) bs s
         _        -> Model t (x, y) o bs s
 
-
 incrementOrientation :: Orientation -> Orientation
 incrementOrientation Orient0 = Orient90
 incrementOrientation Orient90 = Orient180
 incrementOrientation Orient180 = Orient270
 incrementOrientation Orient270 = Orient0
 
-
--- ���̑�
-updateWithTimer :: Model -> Model
-updateWithTimer (Model t (x, y) o bs s)
-    | hasDuplication (reify model') = Model t sourcePosition o (bs ++ piledBlocks) s
-    | otherwise                     = model'
- where
-    model' = Model t (x, y - 1) o bs s
-    piledBlocks = reifyTetrimino t (x, y) o
-
-{-updateWithTimer :: Int -> Model -> Model
+updateWithTimer :: Int -> Model -> Model
 updateWithTimer pr (Model _ (x, y) o bs s)
-    | hasDuplication (reify model') = Model nextTetrimino sourcePosition o (bs ++ piledBlocks) s
-    | otherwise                     = model'
+    | hasDuplication (reify model') = Model nextTetrimino sourcePosition o (bs) s
+--	| hasDuplication (reify model') = Model nextTetrimino sourcePosition o (bs ++ piledBlocks) s
+    | otherwise = model'
+    where
+        nextTetrimino = blockChooser [pr]
+        model' = Model nextTetrimino (x, y - 1) o bs s
+        piledBlocks = reifyTetrimino nextTetrimino (x, y) o
+
+reify :: Model -> [Position]
+reify (Model t (x,  y) o bs _) = concat
+    [ reifyTetrimino t (x, y) o, bs ]
+
+
+reifyTetrimino :: Tetrimino -> Position -> Orientation -> [Position]
+reifyTetrimino t (x, y) o = map shift $ map (rotateByOrientation o) $ fromTetriminoToBlocks t
  where
-    nextTetrimino = blockChooser [pr]
-    model' = Model nextTetrimino (x, y - 1) o bs s
-    piledBlocks = reifyTetrimino nextTetrimino (x, y) o
+    shift :: Position -> Position
+    shift (a, b) = (a + x, b + y)
+
+
+
+
+pickRand :: [Int] -> (Int,[Int])  
+pickRand box = ((head box), (tail box))
+
+{-
+
+deleteCompleteLines :: [(Int, Int)] -> ([(Int, Int)], Int)
+deleteCompleteLines bs = (concat bs', length bs - length bs')
+ where bs' = deleteCompleteLines' $ groupBy `on` snd $ sortOn snd bs
+
+deleteCompleteLines' :: [[(Int, Int)]] -> [[(Int, Int)]]
+deleteCompleteLines' [] = []
+deleteCompleteLines' (bs : bss)
+    |length      bs >= 9 = deleteCompleteLines $ map (map (\ (x, y) -> (x, y - 1))) bss
+    |otherwise = bs : deleteCompleteLines bss
+
 -}
 
 fullHDRect :: NormalDiagram
@@ -213,8 +212,6 @@ screenHeight = 600
 cnv2sec :: UTCTime -> Int
 cnv2sec = floor . (1e9 *) . nominalDiffTimeToSeconds . utcTimeToPOSIXSeconds
 
-pickRand :: [Int] -> (Int,[Int])  
-pickRand box = ((head box), (tail box))
 
 main :: IO ()
 main = do
@@ -231,6 +228,11 @@ main = do
     writeIORef vRandBox sndRand
     vModel <- newIORef $ initialModel rand
     vRender <- newIORef $ view (initialModel rand)
+
+    xRandBox <- readIORef vRandBox
+    let (rand', _) = pickRand xRandBox
+    modifyIORef vModel $ updateWithTimer rand'
+
     -- SDL������
     SDL.initialize [ SDL.InitVideo ]
     window <- SDL.createWindow
@@ -259,8 +261,8 @@ main = do
     _ <- SDL.addTimer 1000 $ const $ do
         --xRandBox <- readIORef vRandBox
         --let (rand', _) = pickRand xRandBox
-        --modifyIORef vModel $ updateWithTimer rand'
-        modifyIORef vModel $ updateWithTimer
+        modifyIORef vModel $ updateWithTimer rand'
+        --modifyIORef vModel $ updateWithTimer
         pushCustomEvent CustomExposeEvent
         return $ SDL.Reschedule 1000
 
